@@ -4,6 +4,8 @@ import time
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, CallbackQuery, Message
 
+import keyboards.reply as reply_kb
+
 logger = logging.getLogger(__name__)
 
 class ThrottlingMiddleware(BaseMiddleware):
@@ -19,6 +21,23 @@ class ThrottlingMiddleware(BaseMiddleware):
 
         if user is None:
             return await handler(event, data)
+
+        state = data.get("state")
+        if isinstance(event, Message) and state is not None:
+            current_state = await state.get_state()
+            text = (event.text or "").strip()
+            command = text.split(maxsplit=1)[0].split("@", maxsplit=1)[0].lower() if text.startswith("/") else ""
+            starts_another_function = (
+                text in reply_kb.MENU_BUTTONS
+                or (command.startswith("/") and command not in {"/start", "/help"})
+            )
+
+            if current_state is not None and starts_another_function:
+                await self.warn(
+                    event,
+                    "Спершу заверши поточну функцію або повернись у меню командою /start.",
+                )
+                return None
 
         if user.id in self.busy:
             logger.info("Тротлінг: користувач %s не дочекався відповіді", user.id)
